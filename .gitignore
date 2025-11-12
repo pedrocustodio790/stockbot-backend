@@ -1,0 +1,39 @@
+# Arquivos compilados do Java
+*.class
+*.jar
+*.war
+*.ear
+target/
+
+# Arquivos de Log
+*.log
+logs/
+
+# Arquivos do Eclipse
+.classpath
+.project
+.settings/
+
+# Arquivos do IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Arquivos do VS Code
+.vscode/
+
+# Arquivos do NetBeans
+/nbproject/private/
+/build/
+/nbbuild/
+/dist/
+/nbdist/
+.nb-gradle/
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+
+# Pasta de Uploads (A MAIS IMPORTANTE)
+/user-photos/
