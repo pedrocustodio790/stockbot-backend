@@ -58,7 +58,7 @@ public class SecurityConfig {
                         // (Regras específicas vêm ANTES das genéricas)
                         .requestMatchers(HttpMethod.GET, "/api/requisicoes/pendentes").hasRole("ADMIN") // ✅ REGRA ADICIONADA AQUI E NA ORDEM CERTA
                         .requestMatchers(HttpMethod.PUT, "/api/requisicoes/{id}/aprovar").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/requisicoes{id}/recusar").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/requisicoes/{id}/recusar").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/pedidos-compra/pendentes").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/pedidos-compra/{id}/aprovar").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/pedidos-compra/{id}/recusar").hasRole("ADMIN")
@@ -80,8 +80,8 @@ public class SecurityConfig {
         // Permite requisições das origens dos seus frontends
         configuration.setAllowedOrigins(Arrays.asList(
                 "http://localhost:5173", // Seu frontend WEB
-                "http://localhost:8081"  // Seu frontend MOBILE (Expo Web) - ADICIONADO
-        ));
+                "http://localhost:8081",
+                "https://stockbot-frontend.onrender.com"        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*")); // Permite todos os headers
         configuration.setAllowCredentials(true);

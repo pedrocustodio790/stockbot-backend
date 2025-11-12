@@ -4,16 +4,15 @@ import com.example.Back.Dto.CreateUserDTO;
 import com.example.Back.Dto.PasswordChangeDTO;
 import com.example.Back.Dto.PasswordResetDTO;
 import com.example.Back.Dto.UsuarioDTO;
-import com.example.Back.Entity.UserRole; // Importação correta
+import com.example.Back.Entity.UserRole;
 import com.example.Back.Entity.Usuario;
 import com.example.Back.Repository.UsuarioRepository;
+import org.springframework.data.domain.Page; // 1. IMPORTAR
+import org.springframework.data.domain.Pageable; // 2. IMPORTAR
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class UsuarioService {
@@ -26,12 +25,15 @@ public class UsuarioService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    public List<UsuarioDTO> findAll() {
-        return usuarioRepository.findAll().stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
+    // --- MÉTODO OTIMIZADO ---
+    @Transactional(readOnly = true)
+    public Page<UsuarioDTO> findAll(Pageable pageable) {
+        // 3. CHAMA O findAll PAGINADO
+        return usuarioRepository.findAll(pageable)
+                .map(this::toDTO); // 4. CONVERTE A PÁGINA
     }
 
+    // (Este método está perfeito)
     public UsuarioDTO createUser(CreateUserDTO createUserDTO) {
         if (usuarioRepository.findByEmail(createUserDTO.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Erro: E-mail já está em uso!");
@@ -46,16 +48,17 @@ public class UsuarioService {
         return toDTO(usuarioSalvo);
     }
 
-    // --- MÉTODO CORRIGIDO ---
+    // (Este método está perfeito)
     @Transactional
-    public UsuarioDTO changeUserRole(Long userId, UserRole newRole) { // <-- TIPO CORRIGIDO AQUI
+    public UsuarioDTO changeUserRole(Long userId, UserRole newRole) {
         Usuario usuario = usuarioRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Utilizador não encontrado."));
-        usuario.setRole(newRole); // Agora os tipos são compatíveis
+        usuario.setRole(newRole);
         Usuario usuarioSalvo = usuarioRepository.save(usuario);
         return toDTO(usuarioSalvo);
     }
 
+    // (Este método está perfeito)
     public void deleteUser(Long id) {
         if (!usuarioRepository.existsById(id)) {
             throw new RuntimeException("Utilizador não encontrado com o id: " + id);
@@ -63,6 +66,7 @@ public class UsuarioService {
         usuarioRepository.deleteById(id);
     }
 
+    // (Este método está perfeito)
     @Transactional
     public void changePassword(String userEmail, PasswordChangeDTO dto) {
         Usuario usuario = usuarioRepository.findByEmail(userEmail)
@@ -78,46 +82,34 @@ public class UsuarioService {
         usuario.setSenha(passwordEncoder.encode(dto.getNewPassword()));
         usuarioRepository.save(usuario);
     }
+
+    // (Este método está perfeito)
     @Transactional
     public void resetPassword(Long userId, PasswordResetDTO dto) {
-        // Busca o usuário pelo ID
         Usuario user = usuarioRepository.findById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado com ID: " + userId));
 
-        // Codifica a nova senha
         String encodedPassword = passwordEncoder.encode(dto.getNewPassword());
-
-        // Atualiza a senha no objeto do usuário
         user.setSenha(encodedPassword);
-
-        // Salva o usuário atualizado no banco
         usuarioRepository.save(user);
     }
 
+    // (Este método está perfeito)
     private UsuarioDTO toDTO(Usuario usuario) {
         return new UsuarioDTO(
                 usuario.getId(),
                 usuario.getEmail(),
                 usuario.getRole(),
-                usuario.getNome(), // ✅ ADICIONE ESTA LINHA
-                usuario.getCaminhoFotoPerfil() // ✅ ADICIONE ESTA LINHA
+                usuario.getNome(),
+                usuario.getCaminhoFotoPerfil()
         );
     }
-    public List<Usuario> findAllUsers() {
-        return usuarioRepository.findAll();
-    }
-    public Usuario updateUserRole(Long id, UserRole newRole) {
-        Usuario usuario = usuarioRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado com id: " + id));
 
-        usuario.setRole(newRole);
-        return usuarioRepository.save(usuario);
+    // 5. REMOVEMOS 'findAllUsers()' e 'updateUserRole()' por serem duplicatas ruins
 
-    }
+    // (Este método está perfeito)
     public Usuario findByEmail(String email) {
         return usuarioRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado com email: " + email));
     }
 }
-
-

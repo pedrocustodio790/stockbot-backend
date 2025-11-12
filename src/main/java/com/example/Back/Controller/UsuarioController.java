@@ -1,20 +1,21 @@
 package com.example.Back.Controller;
 
 import com.example.Back.Dto.*;
-import com.example.Back.Entity.UserRole;
 import com.example.Back.Entity.Usuario;
 import com.example.Back.Service.UsuarioService;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page; // MUDANÇA: Importar Page
+import org.springframework.data.domain.Pageable; // MUDANÇA: Importar Pageable
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+// import java.util.List; // MUDANÇA: Não usamos mais List
 
 @RestController
-@RequestMapping("/api/users") // O RequestMapping correto que você já tinha
+@RequestMapping("/api/users")
 public class UsuarioController {
 
     private final UsuarioService usuarioService;
@@ -23,18 +24,31 @@ public class UsuarioController {
         this.usuarioService = usuarioService;
     }
 
+    // --- MÉTODO OTIMIZADO (Paginação) ---
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<UsuarioDTO>> getAllUsers() {
-        return ResponseEntity.ok(usuarioService.findAll());
+    public ResponseEntity<Page<UsuarioDTO>> getAllUsers(Pageable pageable) { // MUDANÇA: Recebe Pageable
+        // MUDANÇA: Chama o service paginado e retorna a Page
+        return ResponseEntity.ok(usuarioService.findAll(pageable));
     }
+
+    // --- MÉTODO CORRIGIDO (Segurança) ---
     @GetMapping("/me")
-    @PreAuthorize("isAuthenticated()") // Garante que só usuários logados acessem
-    public ResponseEntity<Usuario> getMyProfile(Authentication authentication) {
-        // 'authentication.getName()' pega o email do usuário logado (do token JWT)
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<UsuarioDTO> getMyProfile(Authentication authentication) { // MUDANÇA: Retorna DTO
         String userEmail = authentication.getName();
-        Usuario usuario = usuarioService.findByEmail(userEmail);
-        return ResponseEntity.ok(usuario);
+        Usuario usuario = usuarioService.findByEmail(userEmail); // Busca a entidade
+
+        // MUDANÇA: Converte a Entidade para DTO manualmente
+        // Isso evita vazar a senha e outros campos
+        UsuarioDTO dto = new UsuarioDTO(
+                usuario.getId(),
+                usuario.getEmail(),
+                usuario.getRole(),
+                usuario.getNome(),
+                usuario.getCaminhoFotoPerfil()
+        );
+        return ResponseEntity.ok(dto);
     }
 
     @PostMapping
@@ -44,11 +58,9 @@ public class UsuarioController {
         return new ResponseEntity<>(novoUsuario, HttpStatus.CREATED);
     }
 
-    // --- MÉTODO CORRIGIDO (usando UpdateRoleDTO) ---
     @PutMapping("/{id}/role")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<UsuarioDTO> changeUserRole(@PathVariable Long id, @RequestBody UpdateRoleDTO dto) {
-        // Precisamos garantir que seu service aceite o "UserRole" e não o DTO
         return ResponseEntity.ok(usuarioService.changeUserRole(id, dto.role()));
     }
 
@@ -73,14 +85,14 @@ public class UsuarioController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
     @PutMapping("/{id}/reset-password")
-    @PreAuthorize("hasRole('ADMIN')") // Garante que SÓ ADMINS podem chamar
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> resetUserPassword(
             @PathVariable Long id,
             @RequestBody @Valid PasswordResetDTO passwordResetDTO
     ) {
         usuarioService.resetPassword(id, passwordResetDTO);
-        // Retorna 200 OK (ou 204 No Content) se for bem-sucedido
         return ResponseEntity.ok().build();
     }
 }

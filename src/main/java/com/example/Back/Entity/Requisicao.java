@@ -1,55 +1,50 @@
 package com.example.Back.Entity;
 
-    import com.example.Back.Entity.Componente;
-    import com.example.Back.Entity.Usuario;
-    import jakarta.persistence.
-            *;
-    import lombok.Data;
-    import java.time.LocalDateTime;
-    import java.util.Date;
+import jakarta.persistence.*;
+import lombok.Data;
+import java.util.Date; // MUDANÇA: Import correto
 
-    @Entity
-    @Table(name = "requisicao")
-    @Data
-    public class Requisicao {
+// import java.time.LocalDateTime; // Não está sendo usado
 
-        @Id
-        @GeneratedValue(strategy = GenerationType.IDENTITY)
-        private Long id;
+@Entity
+@Table(name = "requisicao")
+@Data
+public class Requisicao {
 
-        @Temporal(TemporalType.TIMESTAMP)
-        @Column(name = "data_requisicao")
-        private Date dataRequisicao;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-        private String status;
+    @Temporal(TemporalType.TIMESTAMP)
+    @Column(name = "data_requisicao")
+    private Date dataRequisicao;
 
-        @ManyToOne // O componente que foi pedido
-        @JoinColumn(name = "componente_id", nullable = false)
-        private Componente componente;
+    private String status;
 
-        // --- ✅ CAMPOS ADICIONADOS ---
+    @ManyToOne(fetch = FetchType.LAZY) // O componente que foi pedido (otimizado)
+    @JoinColumn(name = "componente_id", nullable = false)
+    private Componente componente;
 
-        @Column(nullable = false)
-        private Integer quantidade; // Quantos foram pedidos
+    @Column(nullable = false)
+    private Integer quantidade; // Quantos foram pedidos
 
-        @Column(length = 1000) // Para justificativas
-        private String observacao;
+    @Column(length = 1000) // Para justificativas
+    private String observacao;
 
-        @ManyToOne // O usuário que pediu
-        @JoinColumn(name = "usuario_id", nullable = false)
-        private Usuario usuario;
+    // --- CAMPO 1 (CORRETO) ---
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "usuario_id", nullable = false) // Dono do pedido
+    private Usuario usuario;
 
-        @ManyToOne
-        @JoinColumn(name = "aprovador_id") // É nulo até que alguém tome uma ação
-        private Usuario aprovador;
+    // --- CAMPO 2 (CORRIGIDO) ---
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "aprovador_id", nullable = true) // MUDANÇA: Nome da coluna e nullable
+    private Usuario aprovador; // Admin que aprovou/recusou
 
-        // 2. QUANDO foi a ação
-        @Temporal(TemporalType.TIMESTAMP)
-        @Column(name = "data_acao")
-        private Date dataAcao;
+    @Temporal(TemporalType.TIMESTAMP)
+    @Column(name = "data_acao")
+    private Date dataAcao;
 
-        // 3. PORQUÊ (o motivo do admin)
-        @Column(name = "motivo_acao", length = 1000)
-        private String motivoAcao;
-
-    }
+    @Column(name = "motivo_acao", length = 1000)
+    private String motivoAcao;
+}

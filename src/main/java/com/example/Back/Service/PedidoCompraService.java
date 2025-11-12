@@ -13,8 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
-import java.util.List;
-import java.util.stream.Collectors;
+// MUDANÇA: Não precisamos mais de List ou Collectors aqui
+// import java.util.List;
+// import java.util.stream.Collectors;
 
 @Service
 public class PedidoCompraService {
@@ -27,7 +28,7 @@ public class PedidoCompraService {
         this.usuarioRepository = usuarioRepository;
     }
 
-    // Para o Usuário criar um pedido
+    // Para o Usuário criar um pedido (Este método está perfeito)
     @Transactional
     public PedidoCompra createPedido(PedidoCompraCreateDTO dto) {
         String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -45,54 +46,50 @@ public class PedidoCompraService {
         return pedidoCompraRepository.save(pedido);
     }
 
-    // Para o Usuário ver seus pedidos
+    // Para o Usuário ver seus pedidos (MÉTODO OTIMIZADO)
     @Transactional(readOnly = true)
-    public List<PedidoCompraDTO> findMeusPedidos() {
+    // MUDANÇA: O método agora recebe Pageable...
+    public Page<PedidoCompraDTO> findMeusPedidos(Pageable pageable) {
         String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
         Usuario usuario = usuarioRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
 
-        return pedidoCompraRepository.findByUsuarioId(usuario.getId())
-                .stream().map(PedidoCompraDTO::new).collect(Collectors.toList());
+        // MUDANÇA: ...chama o repositório paginado...
+        return pedidoCompraRepository.findByUsuarioId(usuario.getId(), pageable)
+                .map(PedidoCompraDTO::new); // ...e retorna uma Page<DTO>
     }
 
-    // Para o Admin ver os pendentes
+    // Para o Admin ver os pendentes (Este método já estava perfeito)
     @Transactional(readOnly = true)
     public Page<PedidoCompraDTO> findPendentes(Pageable pageable) {
         return pedidoCompraRepository.findByStatus("PENDENTE", pageable)
                 .map(PedidoCompraDTO::new);
     }
 
-    // Para o Admin aprovar
+    // Para o Admin aprovar (Este método está perfeito)
     @Transactional
     public PedidoCompra aprovarPedido(Long id, String motivo, Usuario adminLogado) {
         PedidoCompra pedido = pedidoCompraRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Pedido não encontrado"));
 
-        // Atualiza o status
         pedido.setStatus("APROVADO");
-
-        // ✅ 1. PREENCHE OS NOVOS CAMPOS DE AUDITORIA
-        pedido.setAprovador(adminLogado); // QUEM
-        pedido.setDataAcao(new Date());   // QUANDO
-        pedido.setMotivoAcao(motivo);   // PORQUÊ
+        pedido.setAprovador(adminLogado);
+        pedido.setDataAcao(new Date());
+        pedido.setMotivoAcao(motivo);
 
         return pedidoCompraRepository.save(pedido);
     }
 
-    // Para o Admin recusar
+    // Para o Admin recusar (Este método está perfeito)
     @Transactional
     public PedidoCompra recusarPedido(Long id, String motivo, Usuario adminLogado) {
         PedidoCompra pedido = pedidoCompraRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Pedido não encontrado"));
 
-        // Atualiza o status
         pedido.setStatus("RECUSADO");
-
-        // ✅ 2. PREENCHE OS NOVOS CAMPOS DE AUDITORIA
-        pedido.setAprovador(adminLogado); // QUEM
-        pedido.setDataAcao(new Date());   // QUANDO
-        pedido.setMotivoAcao(motivo);   // PORQUÊ
+        pedido.setAprovador(adminLogado);
+        pedido.setDataAcao(new Date());
+        pedido.setMotivoAcao(motivo);
 
         return pedidoCompraRepository.save(pedido);
     }

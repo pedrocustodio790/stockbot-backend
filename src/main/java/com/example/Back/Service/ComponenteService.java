@@ -6,6 +6,8 @@ import com.example.Back.Entity.Historico;
 import com.example.Back.Entity.TipoMovimentacao;
 import com.example.Back.Repository.ComponenteRepository;
 import com.example.Back.Repository.HistoricoRepository;
+import org.springframework.data.domain.Page; // MUDANÇA: Importar Page
+import org.springframework.data.domain.Pageable; // MUDANÇA: Importar Pageable
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
+// import java.util.stream.Collectors; // Não é mais necessário para o findAll
 
 @Service
 public class ComponenteService {
@@ -31,16 +33,22 @@ public class ComponenteService {
     // --- MÉTODOS PÚBLICOS DO SERVIÇO ---
 
     @Transactional(readOnly = true)
-    public List<ComponenteDTO> findAll(String termoDeBusca) {
-        List<Componente> componentes;
+    // MUDANÇA: O método agora recebe Pageable e retorna Page<ComponenteDTO>
+    public Page<ComponenteDTO> findAll(String termoDeBusca, Pageable pageable) {
+
+        Page<Componente> componentesPage; // MUDANÇA: O resultado agora é uma Page
+
         if (termoDeBusca == null || termoDeBusca.trim().isEmpty()) {
-            componentes = componenteRepository.findAll();
+            // MUDANÇA: Chama o findAll paginado
+            componentesPage = componenteRepository.findAll(pageable);
         } else {
-            componentes = componenteRepository.searchByTermo(termoDeBusca);
+            // MUDANÇA: Chama o searchByTermo paginado
+            componentesPage = componenteRepository.searchByTermo(termoDeBusca, pageable);
         }
-        return componentes.stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
+
+        // MUDANÇA: O 'Page' tem seu próprio método .map() para converter o conteúdo
+        // Isso é muito mais eficiente que um stream
+        return componentesPage.map(this::toDTO);
     }
 
     @Transactional
@@ -52,9 +60,6 @@ public class ComponenteService {
         Componente componente = toEntity(dto);
         Componente componenteSalvo = componenteRepository.save(componente);
         criarRegistroHistorico(componenteSalvo, TipoMovimentacao.ENTRADA, componenteSalvo.getQuantidade());
-
-        // Verifica se o novo item já está abaixo do nível mínimo
-
 
         return toDTO(componenteSalvo);
     }
@@ -89,16 +94,17 @@ public class ComponenteService {
 
     @Transactional
     public void delete(Long id) {
-        Componente componente = componenteRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Componente não encontrado com o id: " + id));
+        // 1. Verifica se o componente existe
+        if (!componenteRepository.existsById(id)) {
+            throw new RuntimeException("Componente não encontrado com o id: " + id);
+        }
 
-        List<Historico> historicos = historicoRepository.findByComponenteId(id);
-        historicoRepository.deleteAll(historicos);
+        historicoRepository.deleteAllByComponenteId(id);
 
-        componenteRepository.delete(componente);
+        componenteRepository.deleteById(id);
     }
 
-    // --- MÉTODOS PRIVADOS AUXILIARES ---
+
 
     private void criarRegistroHistorico(Componente componente, TipoMovimentacao tipo, int quantidade) {
         String emailUsuario = SecurityContextHolder.getContext().getAuthentication().getName();

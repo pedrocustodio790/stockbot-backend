@@ -3,6 +3,7 @@ package com.example.Back.Service;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.example.Back.Entity.Usuario;
+import org.springframework.beans.factory.annotation.Value; // 1. IMPORTAR
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
@@ -14,28 +15,32 @@ import java.util.stream.Collectors;
 @Service
 public class TokenService {
 
-    private final String JWT_SECRET = "sua-chave-secreta-super-longa-e-dificil-de-adivinhar";
+
+    @Value("${api.security.token.secret}")
+    private String jwtSecret;
 
     public String gerarToken(Usuario usuario) {
-        // MUDANÇA: Extrai as permissões (roles) do utilizador
         List<String> roles = usuario.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toList());
+
+        Algorithm algorithm = Algorithm.HMAC256(jwtSecret);
 
         return JWT.create()
                 .withIssuer("StockBot API")
                 .withSubject(usuario.getEmail())
                 .withClaim("id", usuario.getId())
-                .withClaim("roles", roles) // <-- ADICIONA AS ROLES AO TOKEN
+                .withClaim("roles", roles)
                 .withExpiresAt(LocalDateTime.now()
                         .plusHours(2)
                         .toInstant(ZoneOffset.of("-03:00"))
                 )
-                .sign(Algorithm.HMAC256(JWT_SECRET));
+                .sign(algorithm);
     }
 
     public String getSubject(String token) {
-        return JWT.require(Algorithm.HMAC256(JWT_SECRET))
+        Algorithm algorithm = Algorithm.HMAC256(jwtSecret);
+        return JWT.require(algorithm)
                 .withIssuer("StockBot API")
                 .build()
                 .verify(token)

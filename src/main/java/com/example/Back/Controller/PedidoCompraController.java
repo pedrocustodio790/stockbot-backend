@@ -7,15 +7,15 @@ import com.example.Back.Entity.PedidoCompra;
 import com.example.Back.Entity.Usuario;
 import com.example.Back.Service.PedidoCompraService;
 import jakarta.validation.Valid;
-import org.springframework.security.core.Authentication;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+// import java.util.List; // MUDANÇA: Não é mais necessário
 
 @RestController
 @RequestMapping("/api/pedidos-compra")
@@ -27,51 +27,47 @@ public class PedidoCompraController {
         this.pedidoCompraService = pedidoCompraService;
     }
 
-    // Endpoint para o USUÁRIO criar um pedido
+    // (Este método está perfeito)
     @PostMapping
     public ResponseEntity<Void> createPedido(@RequestBody @Valid PedidoCompraCreateDTO dto) {
         pedidoCompraService.createPedido(dto);
         return new ResponseEntity<>(HttpStatus.CREATED);
     }
 
-    // Endpoint para o USUÁRIO ver seus pedidos
+    // --- MÉTODO OTIMIZADO (Paginação) ---
     @GetMapping("/me")
-    public ResponseEntity<List<PedidoCompraDTO>> getMeusPedidos() {
-        return ResponseEntity.ok(pedidoCompraService.findMeusPedidos());
+    public ResponseEntity<Page<PedidoCompraDTO>> getMeusPedidos(Pageable pageable) { // MUDANÇA: Recebe Pageable
+        // MUDANÇA: Passa o pageable para o service
+        return ResponseEntity.ok(pedidoCompraService.findMeusPedidos(pageable));
     }
 
-    // Endpoint para o ADMIN ver pedidos pendentes
+    // (Este método já estava perfeito)
     @GetMapping("/pendentes")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<PedidoCompraDTO>> getPendentes(Pageable pageable) {
         return ResponseEntity.ok(pedidoCompraService.findPendentes(pageable));
     }
 
-    // Endpoint para o ADMIN aprovar
+    // (Este método está perfeito)
     @PutMapping("/{id}/aprovar")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<PedidoCompraDTO> aprovarPedido( // ✅ 2. MUDOU O RETORNO
-                                                          @PathVariable Long id,
-                                                          @RequestBody @Valid AcaoRequestDTO dto, // ✅ 3. RECEBE O MOTIVO
-                                                          Authentication authentication // ✅ 4. RECEBE O ADMIN LOGADO
+    public ResponseEntity<PedidoCompraDTO> aprovarPedido(
+            @PathVariable Long id,
+            @RequestBody @Valid AcaoRequestDTO dto,
+            Authentication authentication
     ) {
-        // Pega o usuário (admin) que está fazendo a chamada
         Usuario adminLogado = (Usuario) authentication.getPrincipal();
-
-        // Chama o service atualizado
         PedidoCompra pedidoAtualizado = pedidoCompraService.aprovarPedido(id, dto.getMotivo(), adminLogado);
-
-        // Retorna o pedido completo com os dados da auditoria
         return ResponseEntity.ok(new PedidoCompraDTO(pedidoAtualizado));
     }
 
-    // Endpoint para o ADMIN recusar
+    // (Este método está perfeito)
     @PutMapping("/{id}/recusar")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<PedidoCompraDTO> recusarPedido( // ✅ 2. MUDOU O RETORNO
-                                                          @PathVariable Long id,
-                                                          @RequestBody @Valid AcaoRequestDTO dto, // ✅ 3. RECEBE O MOTIVO
-                                                          Authentication authentication // ✅ 4. RECEBE O ADMIN LOGADO
+    public ResponseEntity<PedidoCompraDTO> recusarPedido(
+            @PathVariable Long id,
+            @RequestBody @Valid AcaoRequestDTO dto,
+            Authentication authentication
     ) {
         Usuario adminLogado = (Usuario) authentication.getPrincipal();
         PedidoCompra pedidoAtualizado = pedidoCompraService.recusarPedido(id, dto.getMotivo(), adminLogado);
