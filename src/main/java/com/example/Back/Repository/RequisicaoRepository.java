@@ -15,8 +15,15 @@ public interface RequisicaoRepository extends JpaRepository<Requisicao, Long> {
             "JOIN FETCH r.usuario u " +
             "JOIN FETCH r.componente c " +
             "LEFT JOIN FETCH r.aprovador a " +
-            "WHERE r.status = :status",
+            "WHERE r.status = :status AND u.dominio = :dominio", // 1. Adicionamos o filtro de domínio
 
-            countQuery = "SELECT COUNT(r) FROM Requisicao r WHERE r.status = :status")
-    Page<Requisicao> findByStatus(@Param("status") String status, Pageable pageable);
+            countQuery = "SELECT COUNT(r) FROM Requisicao r " +
+                    "JOIN r.usuario u " + // 2. O Count tbm precisa do JOIN
+                    "WHERE r.status = :status AND u.dominio = :dominio") // 3. E do filtro
+    Page<Requisicao> findByStatusAndUsuarioDominio(
+            @Param("status") String status,
+            @Param("dominio") String dominio,
+            Pageable pageable
+    );
+
 }

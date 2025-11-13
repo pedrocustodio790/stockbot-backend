@@ -12,9 +12,9 @@ public class UsuarioDTO {
     private Long id;
     private String email;
     private UserRole role;
-
-    // É uma boa prática declará-los como private
     private String nome;
     private String caminhoFotoPerfil;
 
+    // ✅ ESTE É O CAMPO QUE FALTAVA
+    private String dominio;
 }

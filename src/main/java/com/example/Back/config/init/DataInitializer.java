@@ -13,6 +13,11 @@ public class DataInitializer implements CommandLineRunner {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
 
+    // Defina seu admin padrão aqui
+    private static final String ADMIN_EMAIL = "admin@stockbot.com";
+    private static final String ADMIN_DOMINIO = "principal"; // O domínio "mestre"
+    private static final String ADMIN_SENHA = "admin123";
+
     public DataInitializer(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder) {
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
@@ -20,25 +25,26 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-// Verifica se o utilizador admin já existe na base de dados
-        if (usuarioRepository.findByEmail("admin@senai.com").isEmpty()) {
 
-            System.out.println("Nenhum utilizador admin encontrado, a criar um novo...");
+        // MUDANÇA: Verifica usando o método novo e seguro
+        if (usuarioRepository.findByEmailAndDominio(ADMIN_EMAIL, ADMIN_DOMINIO).isEmpty()) {
 
-            // Se não existir, cria um novo utilizador admin
+            System.out.println("Nenhum usuário admin padrão encontrado, criando um novo...");
+
             Usuario admin = new Usuario();
-            admin.setEmail("admin@senai.com");
-            // IMPORTANTE: A senha é encriptada antes de ser salva
-            admin.setSenha(passwordEncoder.encode("admin123"));
+            admin.setEmail(ADMIN_EMAIL);
+            admin.setSenha(passwordEncoder.encode(ADMIN_SENHA));
             admin.setRole(UserRole.ADMIN);
+            admin.setNome("Admin Padrão");
+
+            // MUDANÇA: Seta o novo campo obrigatório
+            admin.setDominio(ADMIN_DOMINIO);
 
             usuarioRepository.save(admin);
 
-            System.out.println("Utilizador admin padrão criado com sucesso!");
+            System.out.println("Usuário admin padrão (" + ADMIN_EMAIL + " / " + ADMIN_DOMINIO + ") criado com sucesso!");
         } else {
-            System.out.println("Utilizador admin padrão já existe.");
+            System.out.println("Usuário admin padrão (" + ADMIN_EMAIL + ") já existe.");
         }
     }
-
-
 }

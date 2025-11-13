@@ -13,7 +13,7 @@ import java.util.Collection;
 import java.util.List;
 
 @Entity
-@Table(name = "usuarios")
+@Table(name = "usuarios", uniqueConstraints = { @UniqueConstraint(columnNames = {"email", "dominio"})})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -25,6 +25,9 @@ public class Usuario implements UserDetails {
 
     @Column(nullable = false, unique = true)
     private String email;
+
+    @Column(name = "dominio", nullable = false)
+    private String dominio;
 
     @Column(nullable = false)
     private String senha;

@@ -1,4 +1,7 @@
 package com.example.Back.Dto;
 
-public record LoginResponseDTO(String token) {
-}
+
+public record LoginResponseDTO(
+        String token,
+        UsuarioDTO usuario
+) {}

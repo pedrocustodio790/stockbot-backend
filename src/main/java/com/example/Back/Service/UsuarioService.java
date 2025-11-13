@@ -1,14 +1,15 @@
 package com.example.Back.Service;
 
-import com.example.Back.Dto.CreateUserDTO;
 import com.example.Back.Dto.PasswordChangeDTO;
 import com.example.Back.Dto.PasswordResetDTO;
+import com.example.Back.Dto.RegisterDTO; // MUDANÇA: Usando o DTO de Registro
 import com.example.Back.Dto.UsuarioDTO;
 import com.example.Back.Entity.UserRole;
 import com.example.Back.Entity.Usuario;
 import com.example.Back.Repository.UsuarioRepository;
-import org.springframework.data.domain.Page; // 1. IMPORTAR
-import org.springframework.data.domain.Pageable; // 2. IMPORTAR
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,52 +26,77 @@ public class UsuarioService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    // --- MÉTODO OTIMIZADO ---
-    @Transactional(readOnly = true)
-    public Page<UsuarioDTO> findAll(Pageable pageable) {
-        // 3. CHAMA O findAll PAGINADO
-        return usuarioRepository.findAll(pageable)
-                .map(this::toDTO); // 4. CONVERTE A PÁGINA
+    // --- NOVO MÉTODO HELPER ---
+    // Pega o usuário (com domínio) que está logado no momento
+    private Usuario getAuthenticatedUser() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof Usuario) {
+            return (Usuario) principal;
+        }
+        throw new RuntimeException("Nenhum usuário autenticado encontrado.");
     }
 
-    // (Este método está perfeito)
-    public UsuarioDTO createUser(CreateUserDTO createUserDTO) {
-        if (usuarioRepository.findByEmail(createUserDTO.getEmail()).isPresent()) {
-            throw new IllegalArgumentException("Erro: E-mail já está em uso!");
+    // --- MÉTODO ATUALIZADO (Seguro) ---
+    // Mostra apenas os usuários do *mesmo domínio* do Admin logado.
+    @Transactional(readOnly = true)
+    public Page<UsuarioDTO> findAll(Pageable pageable) {
+        String dominio = getAuthenticatedUser().getDominio();
+        return usuarioRepository.findAllByDominio(dominio, pageable)
+                .map(this::toDTO);
+    }
+
+    // --- MÉTODO ATUALIZADO (Seguro) ---
+    // (Este método é para um Admin criar um usuário)
+    public UsuarioDTO createUser(RegisterDTO dto) {
+        // Um admin só pode criar usuários no seu próprio domínio
+        String adminDominio = getAuthenticatedUser().getDominio();
+
+        if (usuarioRepository.findByEmailAndDominio(dto.email(), adminDominio).isPresent()) {
+            throw new IllegalArgumentException("Erro: E-mail já está em uso neste domínio!");
         }
 
         Usuario novoUsuario = new Usuario();
-        novoUsuario.setEmail(createUserDTO.getEmail());
-        novoUsuario.setSenha(passwordEncoder.encode(createUserDTO.getSenha()));
-        novoUsuario.setRole(createUserDTO.getRole());
+        novoUsuario.setEmail(dto.email());
+        novoUsuario.setSenha(passwordEncoder.encode(dto.senha()));
+        novoUsuario.setRole(dto.role());
+        novoUsuario.setNome(dto.nome());
+        novoUsuario.setDominio(adminDominio); // Seta o domínio do Admin
 
         Usuario usuarioSalvo = usuarioRepository.save(novoUsuario);
         return toDTO(usuarioSalvo);
     }
 
-    // (Este método está perfeito)
+    // --- MÉTODO ATUALIZADO (Seguro) ---
+    // Garante que o Admin só pode mudar roles do seu próprio domínio
     @Transactional
     public UsuarioDTO changeUserRole(Long userId, UserRole newRole) {
-        Usuario usuario = usuarioRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Utilizador não encontrado."));
+        String adminDominio = getAuthenticatedUser().getDominio();
+
+        Usuario usuario = usuarioRepository.findByIdAndDominio(userId, adminDominio)
+                .orElseThrow(() -> new RuntimeException("Utilizador não encontrado neste domínio."));
+
         usuario.setRole(newRole);
         Usuario usuarioSalvo = usuarioRepository.save(usuario);
         return toDTO(usuarioSalvo);
     }
 
-    // (Este método está perfeito)
+    // --- MÉTODO ATUALIZADO (Seguro) ---
+    // Garante que o Admin só pode deletar usuários do seu próprio domínio
     public void deleteUser(Long id) {
-        if (!usuarioRepository.existsById(id)) {
-            throw new RuntimeException("Utilizador não encontrado com o id: " + id);
+        String adminDominio = getAuthenticatedUser().getDominio();
+
+        if (!usuarioRepository.existsByIdAndDominio(id, adminDominio)) {
+            throw new RuntimeException("Utilizador não encontrado neste domínio com o id: " + id);
         }
         usuarioRepository.deleteById(id);
     }
 
-    // (Este método está perfeito)
+    // --- MÉTODO ATUALIZADO (Seguro) ---
+    // (Este é para o *próprio* usuário mudar sua senha)
     @Transactional
-    public void changePassword(String userEmail, PasswordChangeDTO dto) {
-        Usuario usuario = usuarioRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new RuntimeException("Utilizador não encontrado."));
+    public void changePassword(PasswordChangeDTO dto) {
+        // Pega o usuário logado (email E domínio)
+        Usuario usuario = getAuthenticatedUser();
 
         if (!passwordEncoder.matches(dto.getCurrentPassword(), usuario.getSenha())) {
             throw new IllegalArgumentException("A senha atual está incorreta.");
@@ -83,33 +109,33 @@ public class UsuarioService {
         usuarioRepository.save(usuario);
     }
 
-    // (Este método está perfeito)
+    // --- MÉTODO ATUALIZADO (Seguro) ---
+    // (Este é para um *Admin* resetar a senha de outro usuário)
     @Transactional
     public void resetPassword(Long userId, PasswordResetDTO dto) {
-        Usuario user = usuarioRepository.findById(userId)
-                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado com ID: " + userId));
+        String adminDominio = getAuthenticatedUser().getDominio();
+
+        Usuario user = usuarioRepository.findByIdAndDominio(userId, adminDominio)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado neste domínio com ID: " + userId));
 
         String encodedPassword = passwordEncoder.encode(dto.getNewPassword());
         user.setSenha(encodedPassword);
         usuarioRepository.save(user);
     }
 
-    // (Este método está perfeito)
+    // --- MÉTODO ATUALIZADO (DTO) ---
+    // O DTO agora precisa do 'dominio'
     private UsuarioDTO toDTO(Usuario usuario) {
         return new UsuarioDTO(
                 usuario.getId(),
                 usuario.getEmail(),
                 usuario.getRole(),
                 usuario.getNome(),
-                usuario.getCaminhoFotoPerfil()
+                usuario.getCaminhoFotoPerfil(),
+                usuario.getDominio() // ✅ Campo adicionado
         );
     }
 
-    // 5. REMOVEMOS 'findAllUsers()' e 'updateUserRole()' por serem duplicatas ruins
-
-    // (Este método está perfeito)
-    public Usuario findByEmail(String email) {
-        return usuarioRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado com email: " + email));
-    }
+    // ❌ O método 'findByEmail(String email)' foi REMOVIDO
+    //    pois era inseguro e foi substituído pelo helper 'getAuthenticatedUser()'
 }

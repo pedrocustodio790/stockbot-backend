@@ -12,7 +12,10 @@ public interface HistoricoRepository extends JpaRepository<Historico, Long> {
     @Query(value = "SELECT h FROM Historico h LEFT JOIN FETCH h.componente", // 2. A Query
             countQuery = "SELECT COUNT(h) FROM Historico h") // 3. A Contagem
     Page<Historico> findAll(Pageable pageable);
-
+    @Query("SELECT new com.example.Back.Dto.ItemMovimentadoDTO(h.componente.nome, COUNT(h)) " +
+            "FROM Historico h " +
+            "GROUP BY h.componente.nome " +
+            "ORDER BY COUNT(h) DESC")
     Page<Historico> findByComponenteId(Long componenteId, Pageable pageable);
     void deleteAllByComponenteId(Long componenteId);
 }

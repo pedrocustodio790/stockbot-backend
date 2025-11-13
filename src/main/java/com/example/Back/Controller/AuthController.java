@@ -1,59 +1,70 @@
 package com.example.Back.Controller;
 
-import com.example.Back.Dto.AuthDTO;
+// 1. IMPORTAR OS DTOs CORRETOS
+import com.example.Back.Dto.LoginDTO;
 import com.example.Back.Dto.LoginResponseDTO;
-// import com.example.Back.Dto.RegisterDTO; // Não está sendo usado
-import com.example.Back.Dto.UsuarioDTO; // MUDANÇA: Importar o DTO de usuário
+import com.example.Back.Dto.RegisterDTO;
+import com.example.Back.Dto.UsuarioDTO; // Importar o DTO de usuário
 import com.example.Back.Entity.Usuario;
 import com.example.Back.Service.AuthService;
+import com.example.Back.Service.TokenService; // Importar o TokenService
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager; // Importar o AuthenticationManager
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    // 2. INJETAR OS SERVIÇOS NECESSÁRIOS
     private final AuthService authService;
+    private final TokenService tokenService;
+    private final AuthenticationManager authenticationManager; // O "porteiro" do Spring
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, TokenService tokenService, AuthenticationManager authenticationManager) {
         this.authService = authService;
+        this.tokenService = tokenService;
+        this.authenticationManager = authenticationManager;
     }
 
+    // --- 3. MÉTODO DE LOGIN (CORRIGIDO E ATUALIZADO) ---
     @PostMapping("/login")
-    public ResponseEntity<LoginResponseDTO> login(@RequestBody @Valid AuthDTO data) {
-        String token = authService.login(data);
-        return ResponseEntity.ok(new LoginResponseDTO(token));
+    public ResponseEntity<LoginResponseDTO> login(@RequestBody @Valid LoginDTO dto) {
+
+        // 3a. Cria a string "email::dominio" que o AuthService espera
+        String combinedUsername = dto.email() + "::" + dto.dominio();
+
+        // 3b. Usa o AuthenticationManager para validar
+        var authenticationToken = new UsernamePasswordAuthenticationToken(combinedUsername, dto.senha());
+        var authentication = authenticationManager.authenticate(authenticationToken);
+
+        // 3c. Se chegou aqui, o login é válido. Pegue o usuário e crie o token.
+        var usuario = (Usuario) authentication.getPrincipal();
+        var tokenJWT = tokenService.createToken(usuario);
+
+        // 3d. Converte o usuário para DTO e retorna o novo LoginResponseDTO
+        UsuarioDTO usuarioDTO = new UsuarioDTO(
+                usuario.getId(),
+                usuario.getEmail(),
+                usuario.getRole(),
+                usuario.getNome(),
+                usuario.getCaminhoFotoPerfil(),
+                usuario.getDominio() // Incluindo o domínio
+        );
+
+        return ResponseEntity.ok(new LoginResponseDTO(tokenJWT, usuarioDTO));
     }
 
-    // --- MÉTODO CORRIGIDO (Segurança) ---
+    // --- 4. MÉTODO DE REGISTRO (CORRIGIDO E LIMPO) ---
+    // (Não aceita mais MultipartFile. O upload é feito em outro lugar.)
     @PostMapping("/register")
-    public ResponseEntity<?> register( // MUDANÇA: Retorna DTO, não Entidade
-                                       @RequestParam("nome") String nome,
-                                       @RequestParam("email") String email,
-                                       @RequestParam("senha") String senha,
-                                       @RequestPart(value = "fotoPerfil", required = false) MultipartFile fotoPerfil
-    ) {
-        try {
-            // 1. O Service ainda retorna a Entidade (o que é ok)
-            Usuario novoUsuario = authService.register(nome, email, senha, fotoPerfil);
-
-            // 2. O Controller converte a Entidade para um DTO seguro
-            UsuarioDTO usuarioDTO = new UsuarioDTO(
-                    novoUsuario.getId(),
-                    novoUsuario.getEmail(),
-                    novoUsuario.getRole(),
-                    novoUsuario.getNome(),
-                    novoUsuario.getCaminhoFotoPerfil()
-            );
-
-            // 3. O Controller retorna o DTO (sem a senha)
-            return new ResponseEntity<>(usuarioDTO, HttpStatus.CREATED);
-
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
-        }
+    public ResponseEntity<Void> register(@RequestBody @Valid RegisterDTO dto) {
+        // A lógica de checagem, criptografia e salvar
+        // está toda dentro do AuthService
+        authService.register(dto);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 }

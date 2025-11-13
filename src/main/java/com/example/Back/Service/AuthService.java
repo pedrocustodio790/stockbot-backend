@@ -1,62 +1,61 @@
 package com.example.Back.Service;
 
-import com.example.Back.Dto.AuthDTO;
-import com.example.Back.Entity.UserRole; // Import correto
+import com.example.Back.Dto.RegisterDTO; // MUDANÇA: Importar o DTO correto
 import com.example.Back.Entity.Usuario;
 import com.example.Back.Repository.UsuarioRepository;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 @Service
-public class AuthService {
+public class AuthService implements UserDetailsService {
 
-    private final AuthenticationManager authenticationManager;
     private final UsuarioRepository usuarioRepository;
-    private final TokenService tokenService;
     private final PasswordEncoder passwordEncoder;
-    private final FileStorageService fileStorageService;
 
-    public AuthService(AuthenticationManager authenticationManager, UsuarioRepository usuarioRepository, TokenService tokenService, PasswordEncoder passwordEncoder, FileStorageService fileStorageService) {
-        this.authenticationManager = authenticationManager;
+    public AuthService(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder) {
         this.usuarioRepository = usuarioRepository;
-        this.tokenService = tokenService;
         this.passwordEncoder = passwordEncoder;
-        this.fileStorageService = fileStorageService;
     }
 
-    public String login(AuthDTO data) {
-        try {
-            var usernamePassword = new UsernamePasswordAuthenticationToken(data.email(), data.senha());
-            var auth = this.authenticationManager.authenticate(usernamePassword);
-            return tokenService.gerarToken((Usuario) auth.getPrincipal());
-        } catch (AuthenticationException e) {
-            throw new RuntimeException("Falha na autenticação: e-mail ou senha inválidos.", e);
+    // MUDANÇA: Este método agora é chamado pelo Spring Security (via AuthController)
+    // Ele recebe a string "email::dominio"
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        // 1. Separa a string
+        String[] parts = username.split("::");
+        if (parts.length != 2) {
+            throw new UsernameNotFoundException("Formato de login inválido (esperado: email::dominio).");
         }
+
+        String email = parts[0];
+        String dominio = parts[1];
+
+        // 2. Busca no repositório pelo método novo e correto
+        return usuarioRepository.findByEmailAndDominio(email, dominio)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuário, senha ou domínio inválidos."));
     }
 
-    public Usuario register(String nome, String email, String senha, MultipartFile fotoPerfil) {
-        if (this.usuarioRepository.findByEmail(email).isPresent()) {
-            throw new IllegalArgumentException("E-mail já está em uso.");
+    // MUDANÇA: O método de REGISTRO foi 100% substituído
+    public void register(RegisterDTO dto) {
+
+        // 1. Verifica se a combinação email+dominio já existe
+        if (usuarioRepository.findByEmailAndDominio(dto.email(), dto.dominio()).isPresent()) {
+            throw new RuntimeException("Este e-mail já está cadastrado para este domínio.");
         }
 
-        String nomeArquivoFoto = null;
-        if (fotoPerfil != null && !fotoPerfil.isEmpty()) {
-            nomeArquivoFoto = fileStorageService.save(fotoPerfil);
-        }
-
+        // 2. Cria o novo usuário a partir do DTO
         Usuario novoUsuario = new Usuario();
-        novoUsuario.setNome(nome);
-        novoUsuario.setEmail(email);
-        novoUsuario.setSenha(passwordEncoder.encode(senha));
-        novoUsuario.setCaminhoFotoPerfil(nomeArquivoFoto);
-        novoUsuario.setRole(UserRole.USER); // ✅ CORRIGIDO
+        novoUsuario.setEmail(dto.email());
+        novoUsuario.setSenha(passwordEncoder.encode(dto.senha())); // Criptografa a senha
+        novoUsuario.setRole(dto.role());
+        novoUsuario.setNome(dto.nome());
+        novoUsuario.setDominio(dto.dominio()); // Salva o domínio
 
-        return this.usuarioRepository.save(novoUsuario);
+        // 3. Salva no banco
+        usuarioRepository.save(novoUsuario);
     }
-
-    // O método register(RegisterDTO data) foi removido por ser redundante.
 }
+
