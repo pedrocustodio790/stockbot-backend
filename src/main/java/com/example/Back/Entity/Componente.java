@@ -5,13 +5,13 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List; // Importa a classe List
+import java.util.List;
 
 @Entity
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "componentes")
+@Table(name = "componentes") // (O nome 'componentes' (plural) está correto)
 public class Componente {
 
     @Id
@@ -27,9 +27,22 @@ public class Componente {
     private int quantidade;
     private String localizacao;
     private String categoria;
+
+    @Column(columnDefinition = "TEXT") // (Boa prática para observações longas)
     private String observacoes;
-    private int nivelMinimoEstoque;
+
+    // ✅ APAGAMOS A PRIMEIRA DECLARAÇÃO DUPLICADA DAQUI
 
     @OneToMany(mappedBy = "componente", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Historico> historicos;
+
+    // ✅ MANTEMOS APENAS ESTA DECLARAÇÃO (COM A ANOTAÇÃO)
+    @Column(name = "nivel_minimo_estoque", nullable = false)
+    private int nivelMinimoEstoque;
+
+    // ✅ Este método está 100% CORRETO e é muito útil
+    @Transient
+    public boolean isEstoqueBaixo() {
+        return this.quantidade <= this.nivelMinimoEstoque;
+    }
 }

@@ -4,64 +4,60 @@ import com.example.Back.Dto.ComponenteDTO;
 import com.example.Back.Entity.Componente;
 import com.example.Back.Entity.Historico;
 import com.example.Back.Entity.TipoMovimentacao;
+import com.example.Back.Entity.Usuario; // 1. IMPORTAR USUARIO
 import com.example.Back.Repository.ComponenteRepository;
 import com.example.Back.Repository.HistoricoRepository;
-import org.springframework.data.domain.Page; // MUDANÇA: Importar Page
-import org.springframework.data.domain.Pageable; // MUDANÇA: Importar Pageable
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
-// import java.util.stream.Collectors; // Não é mais necessário para o findAll
 
 @Service
 public class ComponenteService {
 
     private final ComponenteRepository componenteRepository;
     private final HistoricoRepository historicoRepository;
-    private final RequisicaoService requisicaoService;
+    // 2. RequisicaoService removido (não era usado)
 
-    public ComponenteService(ComponenteRepository componenteRepository, HistoricoRepository historicoRepository, RequisicaoService requisicaoService) {
+    public ComponenteService(ComponenteRepository componenteRepository, HistoricoRepository historicoRepository) {
         this.componenteRepository = componenteRepository;
         this.historicoRepository = historicoRepository;
-        this.requisicaoService = requisicaoService;
     }
 
     // --- MÉTODOS PÚBLICOS DO SERVIÇO ---
 
     @Transactional(readOnly = true)
-    // MUDANÇA: O método agora recebe Pageable e retorna Page<ComponenteDTO>
     public Page<ComponenteDTO> findAll(String termoDeBusca, Pageable pageable) {
-
-        Page<Componente> componentesPage; // MUDANÇA: O resultado agora é uma Page
+        Page<Componente> componentesPage;
 
         if (termoDeBusca == null || termoDeBusca.trim().isEmpty()) {
-            // MUDANÇA: Chama o findAll paginado
             componentesPage = componenteRepository.findAll(pageable);
         } else {
-            // MUDANÇA: Chama o searchByTermo paginado
+            // (Assumindo que searchByTermo existe no seu Repositório)
             componentesPage = componenteRepository.searchByTermo(termoDeBusca, pageable);
         }
 
-        // MUDANÇA: O 'Page' tem seu próprio método .map() para converter o conteúdo
-        // Isso é muito mais eficiente que um stream
-        return componentesPage.map(this::toDTO);
+        // 3. MUDANÇA: Usamos o construtor do DTO (que tem a lógica do estoqueBaixo)
+        // em vez do helper toDTO manual.
+        return componentesPage.map(ComponenteDTO::new);
     }
 
     @Transactional
     public ComponenteDTO create(ComponenteDTO dto) {
         if (componenteRepository.existsByCodigoPatrimonio(dto.getCodigoPatrimonio())) {
-            throw new IllegalArgumentException("Código de património já está em uso.");
+            throw new IllegalArgumentException("Código de patrimônio já está em uso.");
         }
 
         Componente componente = toEntity(dto);
         Componente componenteSalvo = componenteRepository.save(componente);
         criarRegistroHistorico(componenteSalvo, TipoMovimentacao.ENTRADA, componenteSalvo.getQuantidade());
 
-        return toDTO(componenteSalvo);
+        // 3. MUDANÇA: Usamos o construtor do DTO
+        return new ComponenteDTO(componenteSalvo);
     }
 
     @Transactional
@@ -71,7 +67,7 @@ public class ComponenteService {
 
         int quantidadeAntiga = componenteExistente.getQuantidade();
 
-        // Atualiza a entidade com os dados do DTO
+        // Atualiza a entidade (esta lógica está 100% correta)
         componenteExistente.setNome(dto.getNome());
         componenteExistente.setCodigoPatrimonio(dto.getCodigoPatrimonio());
         componenteExistente.setQuantidade(dto.getQuantidade());
@@ -88,49 +84,52 @@ public class ComponenteService {
             criarRegistroHistorico(componenteAtualizado, diferenca > 0 ? TipoMovimentacao.ENTRADA : TipoMovimentacao.SAIDA, Math.abs(diferenca));
         }
 
-
-        return toDTO(componenteAtualizado);
+        // 3. MUDANÇA: Usamos o construtor do DTO
+        return new ComponenteDTO(componenteAtualizado);
     }
 
     @Transactional
     public void delete(Long id) {
-        // 1. Verifica se o componente existe
         if (!componenteRepository.existsById(id)) {
             throw new RuntimeException("Componente não encontrado com o id: " + id);
         }
 
+        // (Sua lógica de apagar o histórico primeiro está correta)
         historicoRepository.deleteAllByComponenteId(id);
-
         componenteRepository.deleteById(id);
     }
 
 
+    // --- MÉTODOS PRIVADOS (Helpers) ---
+
+    // 4. MUDANÇA: Adicionado helper para pegar o usuário logado
+    private Usuario getAuthenticatedUser() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof Usuario) {
+            return (Usuario) principal;
+        }
+        // Isso não deve acontecer se o SecurityFilter estiver correto
+        throw new RuntimeException("Nenhum usuário autenticado encontrado.");
+    }
 
     private void criarRegistroHistorico(Componente componente, TipoMovimentacao tipo, int quantidade) {
-        String emailUsuario = SecurityContextHolder.getContext().getAuthentication().getName();
+        // 5. MUDANÇA: Usamos o helper para pegar o email correto
+        Usuario usuario = getAuthenticatedUser();
+
         Historico historico = new Historico();
         historico.setComponente(componente);
         historico.setTipo(tipo);
         historico.setQuantidade(quantidade);
-        historico.setUsuario(emailUsuario);
+        historico.setUsuario(usuario.getEmail()); // <-- Salva apenas o email
         historico.setDataHora(LocalDateTime.now());
         historico.setCodigoMovimentacao(UUID.randomUUID().toString());
         historicoRepository.save(historico);
     }
 
-    private ComponenteDTO toDTO(Componente componente) {
-        return new ComponenteDTO(
-                componente.getId(),
-                componente.getNome(),
-                componente.getCodigoPatrimonio(),
-                componente.getQuantidade(),
-                componente.getLocalizacao(),
-                componente.getCategoria(),
-                componente.getObservacoes(),
-                componente.getNivelMinimoEstoque()
-        );
-    }
+    // 6. MUDANÇA: O helper 'toDTO' foi removido
+    // (Pois agora usamos o construtor ComponenteDTO::new)
 
+    // O helper 'toEntity' está 100% correto
     private Componente toEntity(ComponenteDTO dto) {
         Componente componente = new Componente();
         componente.setNome(dto.getNome());

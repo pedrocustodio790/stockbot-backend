@@ -13,7 +13,7 @@ public class DataInitializer implements CommandLineRunner {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
 
-    // Defina seu admin padrão aqui
+
     private static final String ADMIN_EMAIL = "admin@stockbot.com";
     private static final String ADMIN_DOMINIO = "principal"; // O domínio "mestre"
     private static final String ADMIN_SENHA = "admin123";

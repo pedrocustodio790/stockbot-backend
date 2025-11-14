@@ -1,33 +1,49 @@
 package com.example.Back.Repository;
 
+import com.example.Back.Dto.CategoriaStatsDTO; // 1. IMPORTE O NOVO DTO
 import com.example.Back.Entity.Componente;
-import org.springframework.data.domain.Page; // 1. Importar Page
-import org.springframework.data.domain.Pageable; // 2. Importar Pageable
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.repository.query.Param; // (Importe se não tiver)
 import org.springframework.stereotype.Repository;
 
+import java.util.List; // 2. IMPORTE O java.util.List
 import java.util.Optional;
 
 @Repository
 public interface ComponenteRepository extends JpaRepository<Componente, Long> {
 
-    // Esses métodos estão ótimos, não precisam mudar
-    boolean existsByCodigoPatrimonio(String codigoPatrimonio);
-    Optional<Componente> findByCodigoPatrimonio(String codigoPatrimonio);
-
-
+    // (Seu método de busca paginada 'searchByTermo' já deve estar aqui)
     @Query(value = "SELECT c FROM Componente c WHERE " +
             "LOWER(c.nome) LIKE LOWER(CONCAT('%', :termo, '%')) OR " +
             "LOWER(c.codigoPatrimonio) LIKE LOWER(CONCAT('%', :termo, '%'))",
-
-            // 4. Query de contagem (para a paginação saber o total)
             countQuery = "SELECT COUNT(c) FROM Componente c WHERE " +
                     "LOWER(c.nome) LIKE LOWER(CONCAT('%', :termo, '%')) OR " +
                     "LOWER(c.codigoPatrimonio) LIKE LOWER(CONCAT('%', :termo, '%'))")
     Page<Componente> searchByTermo(@Param("termo") String termo, Pageable pageable);
 
-    // NOTA: O JpaRepository JÁ nos dá o 'findAll(Pageable pageable)' de graça.
-    // Não precisamos declarar ele.
+    // --- ✅ 3. ADICIONE A QUERY DO GRÁFICO DE CATEGORIA ---
+    // (Soma a 'quantidade' de todos os itens, agrupados por 'categoria')
+    @Query("SELECT new com.example.Back.Dto.CategoriaStatsDTO(c.categoria, SUM(c.quantidade)) " +
+            "FROM Componente c " +
+            "WHERE c.quantidade > 0 " + // (Não mostrar categorias com 0)
+            "GROUP BY c.categoria " +
+            "ORDER BY SUM(c.quantidade) DESC")
+    List<CategoriaStatsDTO> getCategoriaStats();
+
+    // --- ✅ 4. ADICIONE A QUERY DOS CARDS (ESTOQUE BAIXO) ---
+    // (Conta quantos itens estão abaixo do seu 'nivelMinimoEstoque' individual)
+    @Query("SELECT COUNT(c) FROM Componente c WHERE c.quantidade <= c.nivelMinimoEstoque")
+    long countItensEstoqueBaixo();
+
+    // --- ✅ 5. ADICIONE A QUERY DA LISTA (ESTOQUE BAIXO) ---
+    // (Retorna a *lista* de itens que estão abaixo do nível mínimo)
+    @Query("SELECT c FROM Componente c WHERE c.quantidade <= c.nivelMinimoEstoque")
+    List<Componente> findItensEstoqueBaixo();
+
+
+    boolean existsByCodigoPatrimonio(String codigoPatrimonio);
+    Optional<Componente> findByCodigoPatrimonio(String codigoPatrimonio);
 }

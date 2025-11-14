@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
-@AllArgsConstructor // O Lombok vai criar o construtor com TODOS os campos, incluindo o novo
+@AllArgsConstructor
 public class ComponenteDTO {
 
     private Long id;
@@ -17,12 +17,13 @@ public class ComponenteDTO {
     private String localizacao;
     private String categoria;
     private String observacoes;
-
-    // 1. ADICIONA O CAMPO QUE FALTAVA
     private int nivelMinimoEstoque;
 
+    // ✅ 1. CAMPO ADICIONADO
+    // Este booleano vai dizer ao front-end se deve pintar a linha
+    private boolean estoqueBaixo;
+
     // 2. ATUALIZA O CONSTRUTOR AUXILIAR
-//    Este construtor converte uma Entidade para este DTO
     public ComponenteDTO(Componente componente) {
         this.id = componente.getId();
         this.nome = componente.getNome();
@@ -31,8 +32,10 @@ public class ComponenteDTO {
         this.localizacao = componente.getLocalizacao();
         this.categoria = componente.getCategoria();
         this.observacoes = componente.getObservacoes();
-// Adiciona a linha que faltava para o novo campo
         this.nivelMinimoEstoque = componente.getNivelMinimoEstoque();
+
+        // ✅ 2. MAPEAMENTO ADICIONADO
+        // Puxa o resultado do método 'isEstoqueBaixo()' da entidade
+        this.estoqueBaixo = componente.isEstoqueBaixo();
     }
 }
-
