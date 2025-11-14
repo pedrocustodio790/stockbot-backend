@@ -1,14 +1,13 @@
-# Use uma imagem oficial do Java
 FROM eclipse-temurin:17-jdk-alpine
 
-# Diretório de trabalho
 WORKDIR /app
 
-# Copie o arquivo JAR
-COPY target/*.jar app.jar
+# Copia o código fonte
+COPY . .
 
-# Exponha a porta
+# Builda a aplicação e depois roda
+RUN ./mvnw clean package -DskipTests
+
 EXPOSE 10000
 
-# Comando para rodar a aplicação
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "target/BackEnd_Refatore-0.0.1-SNAPSHOT.jar"]
