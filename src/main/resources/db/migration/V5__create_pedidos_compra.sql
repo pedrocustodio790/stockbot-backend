@@ -1,7 +1,7 @@
 -- V4__create_pedidos_compra.sql
 
 CREATE TABLE pedidos_compra (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,  -- ← CORREÇÃO AQUI!
     nome_item VARCHAR(255) NOT NULL,
     quantidade INT NOT NULL,
     justificativa TEXT NULL,
