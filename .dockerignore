@@ -1,0 +1,7 @@
+.git
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+target/*.jar
+!target/stockbot-backend-*.jar
