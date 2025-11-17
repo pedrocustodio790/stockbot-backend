@@ -6,7 +6,7 @@ import lombok.Data;
 
 @Data
 public class RequisicaoCreateDTO {
-
+// tentando concertar//
     @NotNull
     private Long componenteId;
 
