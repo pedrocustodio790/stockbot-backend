@@ -30,10 +30,6 @@ public class SecurityConfig {
         this.securityFilter = securityFilter;
     }
 
-    // ✅ Bean do SecurityFilterChain (Configuração das regras de acesso)
-    // ✅ Bean do SecurityFilterChain (Configuração das regras de acesso)
-// Em: src/main/java/com/example/Back/config/SecurityConfig.java
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
@@ -44,60 +40,50 @@ public class SecurityConfig {
                         // --- Rotas Públicas ---
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
-                        .requestMatchers("/user-photos/**").permitAll() // Fotos públicas
+                        .requestMatchers("/user-photos/**").permitAll()
 
-                        // --- Rotas de Usuário Autenticado ---
-                        .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated() // Ver próprio perfil
-                        .requestMatchers(HttpMethod.POST, "/api/requisicoes").authenticated() // Criar requisição de estoque
-                        .requestMatchers(HttpMethod.POST, "/api/pedidos-compra").authenticated() // Criar pedido de compra
-                        .requestMatchers(HttpMethod.GET, "/api/pedidos-compra/me").authenticated() // Ver próprios pedidos
-                        .requestMatchers("/api/componentes/**").authenticated() // Ver/Buscar componentes
-                        .requestMatchers(HttpMethod.GET, "/api/configuracoes/limiteEstoqueBaixo").authenticated() // Ver limite
+                        // --- Rotas de Dashboard (Acesso geral) ---
+                        .requestMatchers(HttpMethod.GET, "/api/dashboard/**").authenticated()
 
                         // --- Rotas de ADMIN ---
-                        // (Regras específicas vêm ANTES das genéricas)
-                        .requestMatchers(HttpMethod.GET, "/api/requisicoes/pendentes").hasRole("ADMIN") // ✅ REGRA ADICIONADA AQUI E NA ORDEM CERTA
-                        .requestMatchers(HttpMethod.PUT, "/api/requisicoes/{id}/aprovar").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/requisicoes/{id}/recusar").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/pedidos-compra/pendentes").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/pedidos-compra/{id}/aprovar").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/pedidos-compra/{id}/recusar").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/users/{id}/reset-password").hasRole("ADMIN")
-                        .requestMatchers("/api/users/**").hasRole("ADMIN") // Regra genérica para /users
-                        .requestMatchers("/api/configuracoes/**").hasRole("ADMIN") // Regra genérica para /configuracoes
+                        .requestMatchers("/api/users/**").hasRole("ADMIN")
+                        .requestMatchers("/api/configuracoes/**").hasRole("ADMIN")
+                        .requestMatchers("/api/requisicoes/pendentes").hasRole("ADMIN")
+                        .requestMatchers("/api/requisicoes/*/aprovar").hasRole("ADMIN")
+                        .requestMatchers("/api/requisicoes/*/recusar").hasRole("ADMIN")
+                        .requestMatchers("/api/pedidos-compra/pendentes").hasRole("ADMIN")
+                        .requestMatchers("/api/pedidos-compra/*/aprovar").hasRole("ADMIN")
+                        .requestMatchers("/api/pedidos-compra/*/recusar").hasRole("ADMIN")
 
                         // --- Qualquer outra rota ---
-                        .anyRequest().authenticated() // Exige autenticação por padrão
+                        .anyRequest().authenticated()
                 )
                 .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
 
-    // ✅ Bean de configuração do CORS (Quem pode acessar a API)
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Permite requisições das origens dos seus frontends
         configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:5173", // Seu frontend WEB
-                "http://localhost:8081",
-                "https://stockbot-2xyv.onrender.com"        ));
+                "http://localhost:5173",
+                "http://localhost:8081", 
+                "https://stockbot-2xyv.onrender.com"
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("*")); // Permite todos os headers
+        configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration); // Aplica a todos os endpoints
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 
-    // ✅ Bean do AuthenticationManager (Quem gerencia a autenticação)
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
         return authenticationConfiguration.getAuthenticationManager();
     }
 
-    // ✅ Bean do PasswordEncoder (Como criptografar senhas)
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
