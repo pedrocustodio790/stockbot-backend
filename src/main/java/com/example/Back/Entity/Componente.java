@@ -36,6 +36,9 @@ public class Componente {
     @OneToMany(mappedBy = "componente", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Historico> historicos;
 
+    @Column(nullable = false)
+    private String dominio;
+
     // ✅ MANTEMOS APENAS ESTA DECLARAÇÃO (COM A ANOTAÇÃO)
     @Column(name = "nivel_minimo_estoque", nullable = false)
     private int nivelMinimoEstoque;

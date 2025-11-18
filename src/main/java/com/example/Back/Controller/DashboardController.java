@@ -15,8 +15,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/dashboard")
-// ❌ REMOVI O @PreAuthorize("hasRole('ADMIN')") DAQUI DE CIMA
-// Para não bloquear o usuário comum de ver o dashboard
+
 public class DashboardController {
 
     private final DashboardService dashboardService;
