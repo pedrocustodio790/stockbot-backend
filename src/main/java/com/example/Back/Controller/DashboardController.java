@@ -1,7 +1,9 @@
 package com.example.Back.Controller;
 
-import com.example.Back.Dto.CategoriaStatsDTO;
-import com.example.Back.Dto.ComponenteDTO;
+// Importe os DTOs e Entidades corretos (aqueles que o Service usa)
+import com.example.Back.Dto.DashboardKpisDTO;
+import com.example.Back.Dto.DashboardStatsDTO;
+import com.example.Back.Entity.Componente;
 import com.example.Back.Service.DashboardService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -10,11 +12,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/dashboard")
-@PreAuthorize("hasRole('ADMIN')") // Só Admins podem ver o dashboard
+// ❌ REMOVI O @PreAuthorize("hasRole('ADMIN')") DAQUI DE CIMA
+// Para não bloquear o usuário comum de ver o dashboard
 public class DashboardController {
 
     private final DashboardService dashboardService;
@@ -23,21 +25,27 @@ public class DashboardController {
         this.dashboardService = dashboardService;
     }
 
-    // 1. Endpoint para os 4 cards do topo
+    // 1. Endpoint KPIs (Corrigido o Tipo de Retorno)
     @GetMapping("/kpis")
-    public ResponseEntity<Map<String, Long>> getKpis() {
+    @PreAuthorize("isAuthenticated()") // Permite ADMIN e USER
+    public ResponseEntity<DashboardKpisDTO> getKpis() {
+        // Agora o tipo bate com o que o Service retorna
         return ResponseEntity.ok(dashboardService.getKpis());
     }
 
-    // 2. Endpoint para o gráfico de categorias (o "Chart.js")
+    // 2. Endpoint Gráfico (Corrigido Nome do Método e DTO)
     @GetMapping("/stats-categorias")
-    public ResponseEntity<List<CategoriaStatsDTO>> getCategoriaStats() {
-        return ResponseEntity.ok(dashboardService.getCategoriaStats());
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<DashboardStatsDTO>> getStatsCategorias() {
+        // Chamando o método certo: getStatsPorCategoria
+        return ResponseEntity.ok(dashboardService.getStatsPorCategoria());
     }
 
-    // 3. Endpoint para a lista de "Estoque Baixo" (o "ActionList")
+    // 3. Endpoint Estoque Baixo (Corrigido para aceitar a Entidade Componente)
     @GetMapping("/estoque-baixo")
-    public ResponseEntity<List<ComponenteDTO>> getItensEstoqueBaixo() {
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<Componente>> getItensEstoqueBaixo() {
+        // O Service retorna List<Componente>, então o Controller aceita isso
         return ResponseEntity.ok(dashboardService.getItensEstoqueBaixo());
     }
 }

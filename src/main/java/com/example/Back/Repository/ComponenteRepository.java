@@ -1,6 +1,7 @@
 package com.example.Back.Repository;
 
 import com.example.Back.Dto.CategoriaStatsDTO; // 1. IMPORTE O NOVO DTO
+import com.example.Back.Dto.DashboardStatsDTO;
 import com.example.Back.Entity.Componente;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -46,4 +47,22 @@ public interface ComponenteRepository extends JpaRepository<Componente, Long> {
 
     boolean existsByCodigoPatrimonio(String codigoPatrimonio);
     Optional<Componente> findByCodigoPatrimonio(String codigoPatrimonio);
+    long countByDominio(String dominio);
+
+    // 2. Soma todas as UNIDADES (quantidade) do domínio
+    @Query("SELECT COALESCE(SUM(c.quantidade), 0) FROM Componente c WHERE c.dominio = :dominio")
+    long sumQuantidadeByDominio(String dominio);
+
+    // 3. Conta itens zerados (Em Falta) no domínio
+    @Query("SELECT COUNT(c) FROM Componente c WHERE c.dominio = :dominio AND c.quantidade = 0")
+    long countItensEmFaltaByDominio(String dominio);
+
+    // 4. Lista itens com estoque baixo (menor ou igual ao mínimo) no domínio
+    @Query("SELECT c FROM Componente c WHERE c.dominio = :dominio AND c.quantidade <= c.nivelMinimoEstoque")
+    List<Componente> findEstoqueBaixoByDominio(String dominio);
+
+    // 5. Agrupa por Categoria para o Gráfico (Retorna o DTO direto!)
+    @Query("SELECT new com.example.Back.Dto.DashboardStatsDTO(c.categoria, SUM(c.quantidade)) " +
+            "FROM Componente c WHERE c.dominio = :dominio GROUP BY c.categoria")
+    List<DashboardStatsDTO> countByCategoriaGrouped(String dominio);
 }
