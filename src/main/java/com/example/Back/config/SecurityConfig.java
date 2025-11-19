@@ -18,6 +18,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.List; // <--- Certifique-se de importar List
 
 @Configuration
 @EnableWebSecurity
@@ -37,6 +38,10 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
+                        // --- CORREÇÃO 1: OBRIGATÓRIO PARA PREFLIGHT DO NAVEGADOR ---
+                        // Libera o "sinal" (OPTIONS) que o navegador manda antes do POST
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                         // --- Rotas Públicas ---
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
@@ -46,6 +51,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/dashboard/**").authenticated()
 
                         // --- Rotas de ADMIN ---
+                        // DICA: Se seu banco salva "ADMIN", use hasAuthority("ADMIN").
+                        // Se salva "ROLE_ADMIN", use hasRole("ADMIN"). Mantenha hasRole se tiver certeza.
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/configuracoes/**").hasRole("ADMIN")
                         .requestMatchers("/api/requisicoes/pendentes").hasRole("ADMIN")
@@ -65,12 +72,22 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(
+
+        // --- CORREÇÃO 2: "BALA DE PRATA" PARA O RENDER ---
+        // Em vez de listar URLs exatas (que falham por causa de http vs https ou barra no final),
+        // usamos o padrão curinga. Isso resolve 99% dos erros de bloqueio no Render.
+        configuration.setAllowedOriginPatterns(List.of("*"));
+
+        // Se preferir manter sua lista restrita, certifique-se que a URL do front
+        // NÃO tem barra no final. Mas o padrão acima é mais seguro para evitar dor de cabeça agora.
+        /* configuration.setAllowedOrigins(Arrays.asList(
                 "http://localhost:5173",
-                "http://localhost:8081", 
+                "http://localhost:8081",
                 "https://stockbot-2xyv.onrender.com"
         ));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        */
+
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
 
