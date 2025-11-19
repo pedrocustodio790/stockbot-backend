@@ -15,8 +15,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-// import java.util.List; // MUDANÇA: Não é mais necessário
-
 @RestController
 @RequestMapping("/api/pedidos-compra")
 public class PedidoCompraController {
@@ -27,50 +25,44 @@ public class PedidoCompraController {
         this.pedidoCompraService = pedidoCompraService;
     }
 
-    // (Este método está perfeito)
     @PostMapping
     public ResponseEntity<Void> createPedido(@RequestBody @Valid PedidoCompraCreateDTO dto) {
         pedidoCompraService.createPedido(dto);
         return new ResponseEntity<>(HttpStatus.CREATED);
     }
 
-    // --- MÉTODO OTIMIZADO (Paginação) ---
     @GetMapping("/me")
-    public ResponseEntity<Page<PedidoCompraDTO>> getMeusPedidos(Pageable pageable) { // MUDANÇA: Recebe Pageable
-        // MUDANÇA: Passa o pageable para o service
+    public ResponseEntity<Page<PedidoCompraDTO>> getMeusPedidos(Pageable pageable) {
         return ResponseEntity.ok(pedidoCompraService.findMeusPedidos(pageable));
     }
 
-    // (Este método já estava perfeito)
     @GetMapping("/pendentes")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<PedidoCompraDTO>> getPendentes(Pageable pageable) {
         return ResponseEntity.ok(pedidoCompraService.findPendentes(pageable));
     }
 
-    // (Este método está perfeito)
     @PutMapping("/{id}/aprovar")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PedidoCompraDTO> aprovarPedido(
             @PathVariable Long id,
             @RequestBody @Valid AcaoRequestDTO dto,
-            Authentication authentication
+            Authentication authentication // Pegamos o admin aqui
     ) {
         Usuario adminLogado = (Usuario) authentication.getPrincipal();
-        PedidoCompra pedidoAtualizado = pedidoCompraService.aprovarPedido(id, dto.getMotivo(), adminLogado);
-        return ResponseEntity.ok(new PedidoCompraDTO(pedidoAtualizado));
+        PedidoCompra pedido = pedidoCompraService.aprovarPedido(id, dto.getMotivo(), adminLogado);
+        return ResponseEntity.ok(new PedidoCompraDTO(pedido));
     }
 
-    // (Este método está perfeito)
     @PutMapping("/{id}/recusar")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<PedidoCompraDTO> recusarPedido(
             @PathVariable Long id,
             @RequestBody @Valid AcaoRequestDTO dto,
-            Authentication authentication
+            Authentication authentication // Pegamos o admin aqui
     ) {
         Usuario adminLogado = (Usuario) authentication.getPrincipal();
-        PedidoCompra pedidoAtualizado = pedidoCompraService.recusarPedido(id, dto.getMotivo(), adminLogado);
-        return ResponseEntity.ok(new PedidoCompraDTO(pedidoAtualizado));
+        PedidoCompra pedido = pedidoCompraService.recusarPedido(id, dto.getMotivo(), adminLogado);
+        return ResponseEntity.ok(new PedidoCompraDTO(pedido));
     }
 }

@@ -4,7 +4,7 @@ import com.example.Back.Dto.ComponenteDTO;
 import com.example.Back.Entity.Componente;
 import com.example.Back.Entity.Historico;
 import com.example.Back.Entity.TipoMovimentacao;
-import com.example.Back.Entity.Usuario; // 1. IMPORTAR USUARIO
+import com.example.Back.Entity.Usuario;
 import com.example.Back.Repository.ComponenteRepository;
 import com.example.Back.Repository.HistoricoRepository;
 import org.springframework.data.domain.Page;
@@ -21,124 +21,130 @@ public class ComponenteService {
 
     private final ComponenteRepository componenteRepository;
     private final HistoricoRepository historicoRepository;
-    // 2. RequisicaoService removido (não era usado)
 
     public ComponenteService(ComponenteRepository componenteRepository, HistoricoRepository historicoRepository) {
         this.componenteRepository = componenteRepository;
         this.historicoRepository = historicoRepository;
     }
 
-    // --- MÉTODOS PÚBLICOS DO SERVIÇO ---
-
-    @Transactional(readOnly = true)
-    public Page<ComponenteDTO> findAll(String termoDeBusca, Pageable pageable) {
-        Page<Componente> componentesPage;
-
-        if (termoDeBusca == null || termoDeBusca.trim().isEmpty()) {
-            componentesPage = componenteRepository.findAll(pageable);
-        } else {
-            // (Assumindo que searchByTermo existe no seu Repositório)
-            componentesPage = componenteRepository.searchByTermo(termoDeBusca, pageable);
-        }
-
-        // 3. MUDANÇA: Usamos o construtor do DTO (que tem a lógica do estoqueBaixo)
-        // em vez do helper toDTO manual.
-        return componentesPage.map(ComponenteDTO::new);
-    }
-
-    @Transactional
-    public ComponenteDTO create(ComponenteDTO dto) {
-        if (componenteRepository.existsByCodigoPatrimonio(dto.getCodigoPatrimonio())) {
-            throw new IllegalArgumentException("Código de patrimônio já está em uso.");
-        }
-
-        Componente componente = toEntity(dto);
-        Componente componenteSalvo = componenteRepository.save(componente);
-        criarRegistroHistorico(componenteSalvo, TipoMovimentacao.ENTRADA, componenteSalvo.getQuantidade());
-
-        // 3. MUDANÇA: Usamos o construtor do DTO
-        return new ComponenteDTO(componenteSalvo);
-    }
-
-    @Transactional
-    public ComponenteDTO update(Long id, ComponenteDTO dto) {
-        Componente componenteExistente = componenteRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Componente não encontrado com o id: " + id));
-
-        int quantidadeAntiga = componenteExistente.getQuantidade();
-
-        // Atualiza a entidade (esta lógica está 100% correta)
-        componenteExistente.setNome(dto.getNome());
-        componenteExistente.setCodigoPatrimonio(dto.getCodigoPatrimonio());
-        componenteExistente.setQuantidade(dto.getQuantidade());
-        componenteExistente.setLocalizacao(dto.getLocalizacao());
-        componenteExistente.setCategoria(dto.getCategoria());
-        componenteExistente.setObservacoes(dto.getObservacoes());
-        componenteExistente.setNivelMinimoEstoque(dto.getNivelMinimoEstoque());
-
-        Componente componenteAtualizado = componenteRepository.save(componenteExistente);
-        int quantidadeNova = componenteAtualizado.getQuantidade();
-        int diferenca = quantidadeNova - quantidadeAntiga;
-
-        if (diferenca != 0) {
-            criarRegistroHistorico(componenteAtualizado, diferenca > 0 ? TipoMovimentacao.ENTRADA : TipoMovimentacao.SAIDA, Math.abs(diferenca));
-        }
-
-        // 3. MUDANÇA: Usamos o construtor do DTO
-        return new ComponenteDTO(componenteAtualizado);
-    }
-
-    @Transactional
-    public void delete(Long id) {
-        if (!componenteRepository.existsById(id)) {
-            throw new RuntimeException("Componente não encontrado com o id: " + id);
-        }
-
-        // (Sua lógica de apagar o histórico primeiro está correta)
-        historicoRepository.deleteAllByComponenteId(id);
-        componenteRepository.deleteById(id);
-    }
-
-
-    // --- MÉTODOS PRIVADOS (Helpers) ---
-
-    // 4. MUDANÇA: Adicionado helper para pegar o usuário logado
     private Usuario getAuthenticatedUser() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         if (principal instanceof Usuario) {
             return (Usuario) principal;
         }
-        // Isso não deve acontecer se o SecurityFilter estiver correto
-        throw new RuntimeException("Nenhum usuário autenticado encontrado.");
+        throw new RuntimeException("Erro de segurança: Usuário não autenticado.");
     }
 
-    private void criarRegistroHistorico(Componente componente, TipoMovimentacao tipo, int quantidade) {
-        // 5. MUDANÇA: Usamos o helper para pegar o email correto
+
+    @Transactional(readOnly = true)
+    public Page<ComponenteDTO> findAll(String termoDeBusca, Pageable pageable) {
+        // Pega o domínio do usuário logado
+        String userDominio = getAuthenticatedUser().getDominio();
+        Page<Componente> page;
+
+        if (termoDeBusca == null || termoDeBusca.trim().isEmpty()) {
+            // Busca tudo DO DOMÍNIO
+            page = componenteRepository.findAllByDominio(userDominio, pageable);
+        } else {
+            // Busca por termo DENTRO DO DOMÍNIO
+            page = componenteRepository.searchByTermoAndDominio(termoDeBusca, userDominio, pageable);
+        }
+
+        return page.map(ComponenteDTO::new);
+    }
+
+
+    @Transactional
+    public ComponenteDTO create(ComponenteDTO dto) {
+        Usuario usuario = getAuthenticatedUser();
+        String userDominio = usuario.getDominio();
+
+        // Verifica duplicidade APENAS dentro desse domínio
+        if (componenteRepository.existsByCodigoPatrimonioAndDominio(dto.getCodigoPatrimonio(), userDominio)) {
+            throw new IllegalArgumentException("O código '" + dto.getCodigoPatrimonio() + "' já existe no seu estoque.");
+        }
+
+        Componente componente = toEntity(dto);
+
+        componente.setDominio(userDominio);
+
+        Componente salvo = componenteRepository.save(componente);
+
+        // Registra histórico
+        criarRegistroHistorico(salvo, TipoMovimentacao.ENTRADA, salvo.getQuantidade(), usuario);
+
+        return new ComponenteDTO(salvo);
+    }
+
+    // --- 3. ATUALIZAÇÃO (Verifica posse) ---
+    @Transactional
+    public ComponenteDTO update(Long id, ComponenteDTO dto) {
         Usuario usuario = getAuthenticatedUser();
 
-        Historico historico = new Historico();
-        historico.setComponente(componente);
-        historico.setTipo(tipo);
-        historico.setQuantidade(quantidade);
-        historico.setUsuario(usuario.getEmail()); // <-- Salva apenas o email
-        historico.setDataHora(LocalDateTime.now());
-        historico.setCodigoMovimentacao(UUID.randomUUID().toString());
-        historicoRepository.save(historico);
-    }
+        // Só encontra se o ID for válido E pertencer ao domínio do usuário
+        Componente componente = componenteRepository.findByIdAndDominio(id, usuario.getDominio())
+                .orElseThrow(() -> new RuntimeException("Item não encontrado ou você não tem permissão para editá-lo."));
 
-    // 6. MUDANÇA: O helper 'toDTO' foi removido
-    // (Pois agora usamos o construtor ComponenteDTO::new)
+        int qtdAntiga = componente.getQuantidade();
 
-    // O helper 'toEntity' está 100% correto
-    private Componente toEntity(ComponenteDTO dto) {
-        Componente componente = new Componente();
+        // Atualiza dados
         componente.setNome(dto.getNome());
-        componente.setCodigoPatrimonio(dto.getCodigoPatrimonio());
+        componente.setCodigoPatrimonio(dto.getCodigoPatrimonio()); // Opcional: validar duplicidade aqui também se mudar o código
         componente.setQuantidade(dto.getQuantidade());
         componente.setLocalizacao(dto.getLocalizacao());
         componente.setCategoria(dto.getCategoria());
         componente.setObservacoes(dto.getObservacoes());
         componente.setNivelMinimoEstoque(dto.getNivelMinimoEstoque());
-        return componente;
+
+        Componente atualizado = componenteRepository.save(componente);
+
+        // Lógica de histórico
+        int diferenca = atualizado.getQuantidade() - qtdAntiga;
+        if (diferenca != 0) {
+            TipoMovimentacao tipo = diferenca > 0 ? TipoMovimentacao.ENTRADA : TipoMovimentacao.SAIDA;
+            criarRegistroHistorico(atualizado, tipo, Math.abs(diferenca), usuario);
+        }
+
+        return new ComponenteDTO(atualizado);
+    }
+
+    // --- 4. DELEÇÃO (Verifica posse) ---
+    @Transactional
+    public void delete(Long id) {
+        String userDominio = getAuthenticatedUser().getDominio();
+
+        // Só deleta se existir E for do meu domínio
+        if (!componenteRepository.existsByIdAndDominio(id, userDominio)) {
+            throw new RuntimeException("Item não encontrado.");
+        }
+
+        historicoRepository.deleteAllByComponenteId(id);
+        componenteRepository.deleteById(id);
+    }
+
+    // --- Helpers ---
+
+    private void criarRegistroHistorico(Componente comp, TipoMovimentacao tipo, int qtd, Usuario user) {
+        Historico h = new Historico();
+        h.setComponente(comp);
+        h.setTipo(tipo);
+        h.setQuantidade(qtd);
+        h.setUsuario(user.getEmail()); // Email de quem fez a ação
+        h.setDataHora(LocalDateTime.now());
+        h.setCodigoMovimentacao(UUID.randomUUID().toString());
+        historicoRepository.save(h);
+    }
+
+    private Componente toEntity(ComponenteDTO dto) {
+        Componente c = new Componente();
+        c.setNome(dto.getNome());
+        c.setCodigoPatrimonio(dto.getCodigoPatrimonio());
+        c.setQuantidade(dto.getQuantidade());
+        c.setLocalizacao(dto.getLocalizacao());
+        c.setCategoria(dto.getCategoria());
+        c.setObservacoes(dto.getObservacoes());
+        c.setNivelMinimoEstoque(dto.getNivelMinimoEstoque());
+        // OBS: O domínio é setado no método create, não aqui
+        return c;
     }
 }

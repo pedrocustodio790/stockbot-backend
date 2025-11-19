@@ -3,6 +3,7 @@ package com.example.Back.Service;
 import com.example.Back.Dto.RegisterDTO; // MUDANÇA: Importar o DTO correto
 import com.example.Back.Entity.Usuario;
 import com.example.Back.Repository.UsuarioRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -37,8 +38,7 @@ public class AuthService implements UserDetailsService {
         return usuarioRepository.findByEmailAndDominio(email, dominio)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário, senha ou domínio inválidos."));
     }
-
-    // MUDANÇA: O método de REGISTRO foi 100% substituído
+@Transactional
     public void register(RegisterDTO dto) {
 
         // 1. Verifica se a combinação email+dominio já existe

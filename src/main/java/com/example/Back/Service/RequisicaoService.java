@@ -3,37 +3,30 @@ package com.example.Back.Service;
 import com.example.Back.Dto.RequisicaoCreateDTO;
 import com.example.Back.Dto.RequisicaoDTO;
 import com.example.Back.Entity.Componente;
-import com.example.Back.Entity.Historico; // MUDANÇA: Importar Historico
+import com.example.Back.Entity.Historico;
 import com.example.Back.Entity.Requisicao;
-import com.example.Back.Entity.TipoMovimentacao; // MUDANÇA: Importar TipoMovimentacao
+import com.example.Back.Entity.TipoMovimentacao;
 import com.example.Back.Entity.Usuario;
 import com.example.Back.Repository.ComponenteRepository;
-import com.example.Back.Repository.HistoricoRepository; // MUDANÇA: Importar HistoricoRepository
+import com.example.Back.Repository.HistoricoRepository;
 import com.example.Back.Repository.RequisicaoRepository;
-// MUDANÇA: Não precisamos mais do UsuarioRepository
-// import com.example.Back.Repository.UsuarioRepository;
-
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
-// MUDANÇA: Não precisamos mais do UsernameNotFoundException
-// import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime; // MUDANÇA: Importar LocalDateTime
+import java.time.LocalDateTime;
 import java.util.Date;
-import java.util.UUID; // MUDANÇA: Importar UUID
+import java.util.UUID;
 
 @Service
 public class RequisicaoService {
 
     private final RequisicaoRepository requisicaoRepository;
     private final ComponenteRepository componenteRepository;
-    // MUDANÇA: Adicionar o HistoricoRepository para criar o log
     private final HistoricoRepository historicoRepository;
 
-    // MUDANÇA: Atualizar o construtor
     public RequisicaoService(RequisicaoRepository requisicaoRepository,
                              ComponenteRepository componenteRepository,
                              HistoricoRepository historicoRepository) {
@@ -42,28 +35,25 @@ public class RequisicaoService {
         this.historicoRepository = historicoRepository;
     }
 
-    // --- MUDANÇA: NOVO MÉTODO HELPER ---
+    // --- HELPER DE SEGURANÇA ---
     private Usuario getAuthenticatedUser() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         if (principal instanceof Usuario) {
             return (Usuario) principal;
         }
-        throw new RuntimeException("Nenhum usuário autenticado encontrado.");
+        throw new RuntimeException("Sessão inválida ou expirada.");
     }
 
-    // --- Método que você já tinha (MÉTODO CORRIGIDO) ---
     @Transactional
     public Requisicao createRequisicao(RequisicaoCreateDTO dto) {
-        // MUDANÇA: Usamos o helper para pegar o usuário
         Usuario usuario = getAuthenticatedUser();
 
-        Componente componente = componenteRepository.findById(dto.getComponenteId())
-                .orElseThrow(() -> new RuntimeException("Componente não encontrado"));
+        // Busca o componente e verifica se pertence ao domínio do usuário
+        Componente componente = componenteRepository.findByIdAndDominio(dto.getComponenteId(), usuario.getDominio())
+                .orElseThrow(() -> new RuntimeException("Componente não encontrado ou não pertence à sua empresa."));
 
-        // MUDANÇA: Validação de estoque (não deixar pedir mais do que tem)
         if (dto.getQuantidade() > componente.getQuantidade()) {
-            throw new RuntimeException("Quantidade solicitada (" + dto.getQuantidade()
-                    + ") é maior que o estoque (" + componente.getQuantidade() + ").");
+            throw new IllegalArgumentException("Quantidade indisponível em estoque. Atual: " + componente.getQuantidade());
         }
 
         Requisicao req = new Requisicao();
@@ -79,86 +69,74 @@ public class RequisicaoService {
 
     @Transactional(readOnly = true)
     public Page<RequisicaoDTO> findPendentes(Pageable pageable) {
-        // MUDANÇA: Verifica o domínio do Admin logado
         Usuario admin = getAuthenticatedUser();
-
-        // MUDANÇA: Busca apenas requisições do domínio do admin
-        Page<Requisicao> paginaDeEntidades = requisicaoRepository.findByStatusAndUsuarioDominio("PENDENTE", admin.getDominio(), pageable);
-
-        // Converte (mapeia) para DTOs
-        return paginaDeEntidades.map(RequisicaoDTO::new);
+        return requisicaoRepository.findByStatusAndUsuarioDominio("PENDENTE", admin.getDominio(), pageable)
+                .map(RequisicaoDTO::new);
     }
 
-    /**
-     * Aprova uma requisição e salva a auditoria.
-     */
     @Transactional
-    public RequisicaoDTO aprovarRequisicao(Long id, String motivo, Usuario adminLogado) {
-        Requisicao requisicao = requisicaoRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Requisição não encontrada"));
+    public RequisicaoDTO aprovarRequisicao(Long id, String motivo) {
+        Usuario adminLogado = getAuthenticatedUser();
 
-        // MUDANÇA: Checagem de segurança de domínio
-        if (!requisicao.getUsuario().getDominio().equals(adminLogado.getDominio())) {
-            throw new RuntimeException("Acesso negado. A requisição não pertence a este domínio.");
+        // 1. Busca SEGURA (Já filtra pelo domínio)
+        Requisicao requisicao = requisicaoRepository.findByIdAndDominio(id, adminLogado.getDominio())
+                .orElseThrow(() -> new RuntimeException("Requisição não encontrada ou acesso negado."));
+
+        if (!"PENDENTE".equals(requisicao.getStatus())) {
+            throw new RuntimeException("Esta requisição já foi processada.");
         }
 
-        // MUDANÇA: LÓGICA DE ESTOQUE (O BUG BÔNUS)
         Componente componente = requisicao.getComponente();
         int quantidadePedida = requisicao.getQuantidade();
 
+        // 2. Verifica Estoque Novamente (Pode ter mudado desde o pedido)
         if (quantidadePedida > componente.getQuantidade()) {
-            throw new RuntimeException("Não foi possível aprovar. Estoque atual (" + componente.getQuantidade() + ") é menor que o solicitado.");
+            throw new RuntimeException("Estoque insuficiente para aprovar agora. Restam: " + componente.getQuantidade());
         }
 
-        // 1. Reduz o estoque do componente
+        // 3. Atualiza Estoque
         componente.setQuantidade(componente.getQuantidade() - quantidadePedida);
         componenteRepository.save(componente);
 
-        // 2. Cria o registro no Histórico
-        criarRegistroHistorico(componente, TipoMovimentacao.SAIDA, quantidadePedida, adminLogado.getEmail(), "Aprovado: " + motivo);
+        // 4. Gera Histórico
+        criarRegistroHistorico(componente, TipoMovimentacao.SAIDA, quantidadePedida, adminLogado.getEmail());
 
-        // 3. Atualiza a requisição
+        // 5. Finaliza Requisição
         requisicao.setStatus("APROVADO");
         requisicao.setAprovador(adminLogado);
         requisicao.setDataAcao(new Date());
         requisicao.setMotivoAcao(motivo);
-        Requisicao requisicaoSalva = requisicaoRepository.save(requisicao);
 
-        return new RequisicaoDTO(requisicaoSalva);
+        return new RequisicaoDTO(requisicaoRepository.save(requisicao));
     }
 
-    /**
-     * Recusa uma requisição e salva a auditoria.
-     */
     @Transactional
-    public RequisicaoDTO recusarRequisicao(Long id, String motivo, Usuario adminLogado) {
-        Requisicao requisicao = requisicaoRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Requisição não encontrada"));
+    public RequisicaoDTO recusarRequisicao(Long id, String motivo) {
+        Usuario adminLogado = getAuthenticatedUser();
 
-        // MUDANÇA: Checagem de segurança de domínio
-        if (!requisicao.getUsuario().getDominio().equals(adminLogado.getDominio())) {
-            throw new RuntimeException("Acesso negado. A requisição não pertence a este domínio.");
+        Requisicao requisicao = requisicaoRepository.findByIdAndDominio(id, adminLogado.getDominio())
+                .orElseThrow(() -> new RuntimeException("Requisição não encontrada ou acesso negado."));
+
+        if (!"PENDENTE".equals(requisicao.getStatus())) {
+            throw new RuntimeException("Esta requisição já foi processada.");
         }
 
         requisicao.setStatus("RECUSADO");
         requisicao.setAprovador(adminLogado);
         requisicao.setDataAcao(new Date());
         requisicao.setMotivoAcao(motivo);
-        Requisicao requisicaoSalva = requisicaoRepository.save(requisicao);
 
-        return new RequisicaoDTO(requisicaoSalva);
+        return new RequisicaoDTO(requisicaoRepository.save(requisicao));
     }
 
-    // MUDANÇA: Método helper para criar o log no histórico
-    private void criarRegistroHistorico(Componente componente, TipoMovimentacao tipo, int quantidade, String emailUsuario, String observacao) {
+    private void criarRegistroHistorico(Componente componente, TipoMovimentacao tipo, int quantidade, String usuarioEmail) {
         Historico historico = new Historico();
         historico.setComponente(componente);
         historico.setTipo(tipo);
         historico.setQuantidade(quantidade);
-        historico.setUsuario(emailUsuario); // O Admin que aprovou
+        historico.setUsuario(usuarioEmail);
         historico.setDataHora(LocalDateTime.now());
         historico.setCodigoMovimentacao(UUID.randomUUID().toString());
-        // historico.setObservacao(observacao); // (Se você adicionar 'observacao' na entidade Historico)
         historicoRepository.save(historico);
     }
 }
